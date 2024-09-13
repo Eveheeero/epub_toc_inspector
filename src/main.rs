@@ -1,7 +1,8 @@
 #![cfg_attr(not(test), windows_subsystem = "windows")]
 
 mod fonts;
-use eframe::egui;
+use eframe::egui::{self, DroppedFile};
+use std::{ffi::OsStr, path::Path};
 
 fn main() -> eframe::Result<()> {
     let mut native_options = eframe::NativeOptions::default();
@@ -17,7 +18,7 @@ fn main() -> eframe::Result<()> {
 
 #[derive(Default)]
 struct Inspector {
-    selected_file: String,
+    dropped_file: Option<DroppedFile>,
     error_message: String,
     toc_list: Vec<String>,
 }
@@ -34,13 +35,16 @@ impl Inspector {
 impl eframe::App for Inspector {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            if self.selected_file.is_empty() && self.error_message.is_empty() {
+            if self.dropped_file.is_none() && self.error_message.is_empty() {
                 ui.heading("Drag & Drop epub file");
             } else if !self.error_message.is_empty() {
                 ui.label(self.error_message.as_str());
             } else {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.heading(&self.selected_file);
+                    ui.heading(
+                        get_path_of_dropped_file(self.dropped_file.as_ref().unwrap())
+                            .unwrap_or_default(),
+                    );
                     ui.separator();
                     for toc in &self.toc_list {
                         ui.label(toc);
@@ -48,10 +52,21 @@ impl eframe::App for Inspector {
                 });
             }
         });
+        self.catch_drop_file(ctx);
     }
 }
 
 impl Inspector {
+    fn catch_drop_file(&mut self, ctx: &egui::Context) {
+        if ctx.input(|x| x.raw.dropped_files.is_empty() || x.raw.dropped_files.len() > 1) {
+            return;
+        }
+        let dropped_file = ctx.input(|x| x.raw.dropped_files.first().cloned().unwrap());
+        if let Some(path) = get_path_of_dropped_file(&dropped_file) {
+            self.read_epub(&path);
+        }
+        self.dropped_file = Some(dropped_file);
+    }
     fn read_epub(&mut self, path: &str) {
         let Ok(file) = epub::doc::EpubDoc::new(path) else {
             self.error_message = "Invalid epub file".to_string();
@@ -59,4 +74,14 @@ impl Inspector {
         };
         self.toc_list = file.toc.into_iter().map(|x| x.label).collect();
     }
+}
+
+fn get_path_of_dropped_file(dropped_file: &DroppedFile) -> Option<String> {
+    dropped_file
+        .path
+        .as_ref()
+        .map(AsRef::as_ref)
+        .and_then(Path::file_name)
+        .and_then(OsStr::to_str)
+        .map(ToOwned::to_owned)
 }
