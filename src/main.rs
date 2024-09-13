@@ -42,7 +42,7 @@ impl eframe::App for Inspector {
             } else {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.heading(
-                        get_path_of_dropped_file(self.dropped_file.as_ref().unwrap())
+                        get_name_of_dropped_file(self.dropped_file.as_ref().unwrap())
                             .unwrap_or_default(),
                     );
                     ui.separator();
@@ -62,12 +62,12 @@ impl Inspector {
             return;
         }
         let dropped_file = ctx.input(|x| x.raw.dropped_files.first().cloned().unwrap());
-        if let Some(path) = get_path_of_dropped_file(&dropped_file) {
-            self.read_epub(&path);
+        if dropped_file.path.is_some() {
+            self.read_epub(dropped_file.path.as_ref().unwrap());
         }
         self.dropped_file = Some(dropped_file);
     }
-    fn read_epub(&mut self, path: &str) {
+    fn read_epub(&mut self, path: impl AsRef<Path>) {
         let Ok(file) = epub::doc::EpubDoc::new(path) else {
             self.error_message = "Invalid epub file".to_string();
             return;
@@ -76,7 +76,7 @@ impl Inspector {
     }
 }
 
-fn get_path_of_dropped_file(dropped_file: &DroppedFile) -> Option<String> {
+fn get_name_of_dropped_file(dropped_file: &DroppedFile) -> Option<String> {
     dropped_file
         .path
         .as_ref()
